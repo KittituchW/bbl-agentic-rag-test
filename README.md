@@ -1,9 +1,9 @@
 # Agentic AI with RAG — BBL AI Engineer Programming Test
 
-A two-agent system built with the **OpenAI Agents SDK**: a **Data Retriever** agent
-performs Retrieval-Augmented Generation over a local knowledge base
-(`knowledge_base.txt`, fictional company policies), and a **Report Generator**
-agent synthesizes the retrieved snippets into a grounded, non-redundant answer.
+A two-agent RAG path built with the **OpenAI Agents SDK**: a **Data Retriever**
+searches a local knowledge base (`knowledge_base.txt`, fictional company
+policies), and a **Report Generator** synthesizes the snippets. A conditional
+**Verifier** checks high-risk knowledge-gap and policy-violation answers.
 
 ## Architecture
 
@@ -20,8 +20,12 @@ flowchart TD
     RRF --> NA{"No-answer<br/>check"}
     NA -->|relevant| TOP["Up to 3 raw snippets<br/>matched chunks only, verbatim, with scores"]
     NA -->|no credible match| NORES["NO_RELEVANT_INFORMATION"]
-    TOP --> FINAL["Report Generator writes<br/>the final grounded answer"]
-    NORES --> FINAL
+    TOP --> DRAFT["Report Generator writes<br/>a grounded draft"]
+    NORES --> DRAFT
+    DRAFT --> RISK{"Gap claim or<br/>violation question?"}
+    RISK -->|no| FINAL["Final answer"]
+    RISK -->|yes| VERIFY["Verifier reuses exact evidence<br/>30s timeout · quota fallback"]
+    VERIFY --> FINAL
 ```
 
 ## Setup
@@ -32,11 +36,12 @@ pip install -r requirements.txt
 cp .env.example .env                                # then fill in your key(s)
 ```
 
-`.env` supports two providers (set `LLM_PROVIDER`):
+`.env` supports three providers (set `LLM_PROVIDER`):
 
 | Provider | What you need |
 |---|---|
 | `bbl` | The gpt-5-mini key for BBL's Azure APIM gateway (`BBL_API_KEY`) |
+| `google` | A Google AI Studio key (`GOOGLE_API_KEY`) |
 | `openai` | A standard OpenAI API key (`OPENAI_API_KEY`) |
 
 > The first run downloads the MiniLM embedding model (~80 MB). If the download
@@ -60,7 +65,8 @@ python run_samples.py -k parking -k injection                  # only matching q
 every query in one process and one event loop (one embedding-model load, no
 per-query process startup), prints the retrieval trace *before* each answer so
 the RAG layer is visible rather than implied, and writes a markdown transcript.
-`v3.md` is the committed run.
+Every answer is also checked against deterministic required and forbidden
+phrases, so factual failures are reported separately from API errors.
 
 | # | Probes | Query |
 |---|---|---|
@@ -97,6 +103,14 @@ answer from parametric memory. The Data Retriever additionally uses
 `tool_use_behavior="stop_on_first_tool"`: the custom tool's output *is* the
 agent's output — raw chunks are returned verbatim (as the brief requires),
 the LLM cannot paraphrase them, and one model round-trip is saved per query.
+
+**Conditional verification with graceful fallback.** A stronger verifier runs
+only when the draft claims the knowledge base is missing information or the
+question asks which rules were violated. It receives the exact original
+evidence rather than retrieving again. Policy-violation findings use structured
+scenario and policy quotes that are checked before rendering. If verification
+hits a provider quota or exceeds `VERIFIER_TIMEOUT_SECONDS`, the grounded draft
+is returned instead of failing the entire answer.
 
 **Hybrid retrieval (BM25 + local embeddings + RRF).** Keyword-only search
 misses paraphrases ("overseas trip" never matches "international travel");
@@ -231,3 +245,6 @@ re-reading the snippets before any claim of absence.
 - The retrieval tool reads one fixed file path — no user-supplied paths.
 - Tracing is disabled (`set_tracing_disabled(True)`) so no data is exported
   to the OpenAI traces dashboard.
+- Answer generation still sends the user query and retrieved policy snippets
+  to the configured external LLM provider; use only data approved for that
+  provider.

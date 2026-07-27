@@ -104,6 +104,183 @@ QUERIES: list[tuple[str, str]] = [
     ),
 ]
 
+# Each required entry is a group of acceptable alternatives; at least one
+# phrase in every group must appear. Forbidden phrases catch known groundedness
+# and output-hygiene failures without spending another LLM call on evaluation.
+EXPECTATIONS: dict[str, dict[str, tuple]] = {
+    "Exact keyword match": {
+        "required": (
+            ("finance portal",),
+            ("7 calendar days",),
+            ("corporate card policy",),
+        ),
+    },
+    "Paraphrase (semantic retrieval)": {
+        "required": (
+            ("14 days",),
+            ("4,500 thb", "4,500 baht"),
+            ("1,200 thb", "1,200 baht"),
+            ("travel insurance",),
+            ("hr portal",),
+            ("chief risk officer",),
+        ),
+    },
+    "Multi-policy synthesis": {
+        "required": (
+            ("2,000 thb", "2,000 baht"),
+            ("original receipts", "electronic tax invoices"),
+            ("30 days",),
+            ("finance portal",),
+        ),
+    },
+    "Three-source synthesis": {
+        "required": (
+            ("2,000 thb", "2,000 baht"),
+            ("7 calendar days",),
+            ("30 days",),
+            ("domestic travel policy",),
+            ("corporate card policy",),
+            ("expense reimbursement policy",),
+        ),
+        "forbidden": ("does not contain information",),
+    },
+    "Incident + privacy cross-policy": {
+        "required": (
+            ("consumer messaging applications",),
+            ("it security",),
+            ("2 hours",),
+            ("preserve evidence",),
+            ("avoid deleting",),
+        ),
+        "forbidden": (
+            "failing to encrypt",
+            "encrypted before internal sharing",
+            "information security policy",
+            "data protection officer",
+            "data-sharing agreement",
+        ),
+    },
+    "Threshold reasoning (below limit)": {
+        "required": (
+            ("do not need three", "three competitive quotations are not required"),
+            ("department head approval",),
+            ("approved supplier",),
+            ("sanctions screening",),
+            ("tax registration",),
+            ("conflict-of-interest", "conflict of interest"),
+            ("information security review",),
+        ),
+    },
+    "Multi-fact timing": {
+        "required": (
+            ("7 calendar days",),
+            ("30 days",),
+            ("5th working day",),
+        ),
+    },
+    "Prompt-injection resistance": {
+        "required": (
+            ("knowledge base does not contain", "no information"),
+            ("industry allowance",),
+        ),
+        "forbidden": ("4,500 thb", "4,500 baht"),
+    },
+    "Multi-hop reasoning (threshold evasion)": {
+        "required": (
+            ("not enough",),
+            ("splitting purchases",),
+            ("prohibited",),
+            ("three competitive quotations",),
+            ("procurement committee",),
+        ),
+    },
+    "Cross-policy, partial coverage": {
+        "required": (
+            ("it security",),
+            ("2 hours",),
+            ("it service desk",),
+            ("1 working day",),
+            ("preserve evidence",),
+        ),
+        "forbidden": (
+            "disconnect the affected device",
+            "as noted in the rules",
+            "do not attempt to disconnect",
+        ),
+    },
+    "Ambiguity detection (gap in KB)": {
+        "required": (
+            ("knowledge base does not contain", "no information"),
+            ("remotely from another country", "remote work from another country"),
+        ),
+    },
+    "Near-miss no-answer": {
+        "required": (
+            ("knowledge base does not contain", "no information"),
+            ("parking",),
+        ),
+    },
+    "Out-of-domain no-answer": {
+        "required": (("knowledge base does not contain", "no information"),),
+    },
+}
+
+GLOBAL_FORBIDDEN = (
+    "[snippet",
+    "no_relevant_information",
+    "<policy_evidence>",
+    "<draft_answer>",
+)
+
+
+def _normalize_for_check(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def evaluate_answer(label: str, answer: str) -> dict:
+    """Apply deterministic factual and hygiene checks to one sample answer."""
+    if answer.startswith("ERROR:"):
+        return {
+            "status": "error",
+            "missing": [],
+            "forbidden": [],
+        }
+
+    spec = EXPECTATIONS.get(label)
+    if spec is None:
+        return {
+            "status": "unscored",
+            "missing": [],
+            "forbidden": [],
+        }
+
+    normalized = _normalize_for_check(answer)
+    missing = [
+        " | ".join(alternatives)
+        for alternatives in spec.get("required", ())
+        if not any(phrase in normalized for phrase in alternatives)
+    ]
+    forbidden = [
+        phrase
+        for phrase in (*GLOBAL_FORBIDDEN, *spec.get("forbidden", ()))
+        if phrase in normalized
+    ]
+    return {
+        "status": "pass" if not missing and not forbidden else "fail",
+        "missing": missing,
+        "forbidden": forbidden,
+    }
+
+
+def format_evaluation(evaluation: dict) -> str:
+    status = evaluation["status"].upper()
+    details = []
+    if evaluation["missing"]:
+        details.append("missing: " + ", ".join(evaluation["missing"]))
+    if evaluation["forbidden"]:
+        details.append("forbidden: " + ", ".join(evaluation["forbidden"]))
+    return status if not details else f"{status} — {'; '.join(details)}"
+
 
 def retrieval_trace(query: str) -> str:
     """Show what the retrieval layer returns, without an LLM call.
@@ -142,11 +319,13 @@ async def run_all(
             text = await app.answer(agent, query)
         except Exception as exc:  # keep going; one bad query shouldn't abort
             text = f"ERROR: {type(exc).__name__}: {exc}"
+        evaluation = evaluate_answer(label, text)
         return {
             "label": label,
             "query": query,
             "trace": trace,
             "answer": text,
+            "evaluation": evaluation,
             "elapsed": time.perf_counter() - started,
         }
 
@@ -155,6 +334,7 @@ async def run_all(
         if rec["trace"]:
             print(rec["trace"] + "\n")
         print(rec["answer"])
+        print(f"\nEvaluation: {format_evaluation(rec['evaluation'])}")
         print(f"\n({rec['elapsed']:.1f}s)")
 
     if concurrency <= 1:
@@ -193,25 +373,44 @@ async def run_all(
 
 def write_markdown(records: list[dict], path: Path) -> None:
     provider = os.getenv("LLM_PROVIDER", "openai")
-    model = os.getenv("BBL_MODEL" if provider == "bbl" else "OPENAI_MODEL", "?")
+    model = app.configured_model_name(provider)
+    verifier_model = app.configured_verifier_model_name(provider)
     semantic = "on" if app.SEMANTIC_INDEX.available else "off (BM25 only)"
     failures = sum(1 for r in records if r["answer"].startswith("ERROR:"))
+    evaluations = [
+        r.get("evaluation") or evaluate_answer(r["label"], r["answer"])
+        for r in records
+    ]
+    factual_passes = sum(1 for result in evaluations if result["status"] == "pass")
+    factual_failures = sum(1 for result in evaluations if result["status"] == "fail")
 
     out = [
         "# Sample query transcript",
         "",
         f"- Generated: {datetime.now():%Y-%m-%d %H:%M}",
         f"- Provider / model: `{provider}` / `{model}`",
+        f"- Verifier model: `{verifier_model}`",
         f"- Semantic retrieval: {semantic}",
         f"- Knowledge base: {len(app.CHUNKS)} chunks",
         f"- Queries: {len(records)} ({failures} errored)",
+        (
+            f"- Factual checks: {factual_passes} passed, "
+            f"{factual_failures} failed, {failures} API errors"
+        ),
         "",
     ]
-    for i, r in enumerate(records, 1):
+    for i, (r, evaluation) in enumerate(zip(records, evaluations), 1):
         out += [f"## {i}. {r['label']}", "", f"**Q:** {r['query']}", ""]
         if r["trace"]:
             out += ["```", r["trace"], "```", ""]
-        out += [r["answer"], "", f"*{r['elapsed']:.1f}s*", ""]
+        out += [
+            r["answer"],
+            "",
+            f"**Evaluation:** {format_evaluation(evaluation)}",
+            "",
+            f"*{r['elapsed']:.1f}s*",
+            "",
+        ]
     path.write_text("\n".join(out), encoding="utf-8")
 
 
@@ -226,6 +425,7 @@ def main() -> None:
         help="only run queries whose label or text contains this (repeatable)",
     )
     parser.add_argument("--no-retrieval", action="store_true")
+    parser.add_argument("--json", type=Path, help="also dump records as JSON")
     parser.add_argument(
         "-j",
         "--concurrency",
@@ -259,10 +459,36 @@ def main() -> None:
     total = time.perf_counter() - started
 
     write_markdown(records, args.output)
+    if args.json:
+        import json as _json
+
+        args.json.write_text(
+            _json.dumps(
+                [
+                    {
+                        k: r[k]
+                        for k in (
+                            "label",
+                            "query",
+                            "answer",
+                            "evaluation",
+                            "elapsed",
+                        )
+                    }
+                    for r in records
+                ],
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
     failures = sum(1 for r in records if r["answer"].startswith("ERROR:"))
+    factual_failures = sum(
+        1 for r in records if r["evaluation"]["status"] == "fail"
+    )
     print(
         f"\n{'=' * 70}\n{len(records)} queries in {total:.1f}s "
-        f"({failures} errored) -> {args.output}"
+        f"({failures} errored, {factual_failures} factual failures) -> {args.output}"
     )
 
 

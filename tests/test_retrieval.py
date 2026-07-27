@@ -64,6 +64,23 @@ def test_multi_policy_query(chunks, semantic_index):
     assert "Expense Reimbursement Policy" in text
 
 
+def test_three_source_hotel_card_query(chunks, semantic_index):
+    """The failed synthesis case must receive all three supporting policies."""
+    results = hybrid_search(
+        (
+            "I paid for a domestic hotel with my corporate card. What is the "
+            "hotel limit, receipt upload deadline, and expense claim deadline?"
+        ),
+        chunks,
+        semantic_index,
+    )
+    assert results != NO_ANSWER_MARKER
+    text = _texts(results)
+    assert "Domestic Travel Policy" in text
+    assert "Corporate Card Policy" in text
+    assert "Expense Reimbursement Policy" in text
+
+
 def test_unrelated_query_returns_no_answer(chunks, semantic_index):
     """A query with no relation to any policy must trigger the marker."""
     results = hybrid_search(
