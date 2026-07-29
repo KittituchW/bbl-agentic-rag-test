@@ -217,9 +217,11 @@ Read it as one sample rather than a score. The same question has passed and
 then failed across repeat runs with nothing changed, so 13 / 13 is a
 demonstrated ceiling, not a guaranteed rate.
 
-The same suite was also run against the BBL gateway on `gpt-5-mini`, with
-`LLM_PROVIDER=bbl`. That transcript is not committed, to keep one run in the
-repository rather than two of the same thing.
+The suite was first run against the BBL gateway on `gpt-5-mini`
+(`LLM_PROVIDER=bbl`). That key reached its usage limit partway through
+development, so the committed baseline and everything after it run on Google.
+The provider is one environment variable and the architecture is identical
+either way.
 
 ---
 
