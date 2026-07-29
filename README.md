@@ -303,8 +303,6 @@ answer, so a claim of absence now requires re-reading the snippets first.
 
 ## Known limitations
 
-**RAG is not strictly necessary at this scale.** The knowledge base fits in a
-single prompt. It is implemented to satisfy the brief.
 
 **The cosine floor cannot separate relevant from irrelevant chunks, and no
 single value would.** `MIN_COSINE = 0.25` is empirical and model-specific.
