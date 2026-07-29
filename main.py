@@ -24,7 +24,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
+import shutil
 import sys
+import textwrap
 from pathlib import Path
 from typing import Literal
 
@@ -615,6 +618,48 @@ async def answer(agent: Agent, query: str) -> str:
     return verified_answer
 
 
+DISPLAY_WIDTH_MAX = 88  # long measures are hard to read even on a wide terminal
+DISPLAY_WIDTH_MIN = 40  # below this, wrapping does more harm than good
+_BULLET_RE = re.compile(r"^(\s*)([-*]|\d+\.)\s+")
+
+
+def display_width() -> int:
+    """Wrap to the terminal, capped so a maximised window stays readable."""
+    return max(DISPLAY_WIDTH_MIN, min(shutil.get_terminal_size().columns - 2,
+                                      DISPLAY_WIDTH_MAX))
+
+
+def wrap_answer(text: str, width: int | None = None) -> str:
+    """Wrap an answer for the terminal without flattening its structure.
+
+    Answers are markdown: headings, bullets and blank lines all carry meaning.
+    `textwrap.fill` on the whole string would collapse them into one paragraph,
+    so each line is wrapped on its own terms — blank lines and headings pass
+    through untouched, and a bullet's continuation lines are indented to hang
+    under its text rather than resetting to the left margin.
+    """
+    width = width or display_width()
+    out: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or len(line) <= width:
+            out.append(line)
+            continue
+
+        bullet = _BULLET_RE.match(line)
+        indent = " " * len(bullet.group(0)) if bullet else re.match(r"\s*", line).group(0)
+        out.append(
+            textwrap.fill(
+                line,
+                width=width,
+                subsequent_indent=indent,
+                break_long_words=False,  # never split a URL or a long token
+                break_on_hyphens=False,  # keep "conflict-of-interest" intact
+            )
+        )
+    return "\n".join(out)
+
+
 def main() -> None:
     load_dotenv()
     set_tracing_disabled(True)
@@ -627,8 +672,11 @@ def main() -> None:
         queries = iter(lambda: input("\nQ: ").strip(), "")
 
     for query in queries:
-        print(f"\n=== Query: {query}")
-        print(asyncio.run(answer(agent, query)))
+        width = display_width()
+        print(f"\n{'=' * width}")
+        print(wrap_answer(f"Query: {query}", width))
+        print("=" * width)
+        print(wrap_answer(asyncio.run(answer(agent, query)), width))
 
 
 if __name__ == "__main__":

@@ -409,3 +409,34 @@ def test_factual_evaluator_flags_privacy_overreach_and_api_errors():
     assert overreach["status"] == "fail"
     assert "information security policy" in overreach["forbidden"]
     assert api_error["status"] == "error"
+
+
+def test_wrap_answer_preserves_markdown_structure():
+    wrapped = app.wrap_answer(
+        "### Hotel Limit\n"
+        "\n"
+        "- Hotel reimbursement is capped at 2,000 THB per night for domestic "
+        "stays, and claims must be submitted within 30 days (Domestic Travel "
+        "Policy).\n",
+        width=60,
+    )
+    lines = wrapped.splitlines()
+
+    assert "### Hotel Limit" in lines  # headings pass through unwrapped
+    assert "" in lines  # blank lines survive
+    assert all(len(line) <= 60 for line in lines)
+    # A bullet's continuation hangs under its text instead of resetting left.
+    continuations = [ln for ln in lines if ln.startswith("  ") and ln.strip()]
+    assert continuations, "expected an indented continuation line"
+
+
+def test_wrap_answer_does_not_split_hyphenated_terms_or_urls():
+    wrapped = app.wrap_answer(
+        "- Provide a conflict-of-interest declaration and see "
+        "https://example.com/a/deliberately/long/policy/url for details "
+        "(Vendor Onboarding Policy).",
+        width=40,
+    )
+
+    assert "conflict-of-interest" in wrapped
+    assert "https://example.com/a/deliberately/long/policy/url" in wrapped
