@@ -63,6 +63,7 @@ without it the project's dependencies are not on the path.
 # ask a question
 python main.py "What is the policy on international travel?"   # single query
 python main.py                                                 # interactive loop
+LOG_LEVEL=WARNING python main.py "..."                         # show fallbacks as they happen
 
 # evaluate
 pytest tests/ -v                                               # offline tests, no API key needed

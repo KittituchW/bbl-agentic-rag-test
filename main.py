@@ -670,6 +670,16 @@ def wrap_answer(text: str, width: int | None = None) -> str:
 
 def main() -> None:
     load_dotenv()
+    # Diagnostics are for operators, not for the person reading the answer: a
+    # degraded-but-correct run (verifier unavailable, embeddings missing) would
+    # otherwise print a warning above the answer. They are suppressed by
+    # default and recoverable with LOG_LEVEL rather than deleted — a silent
+    # fallback that cannot be observed is worse than a noisy one.
+    #   LOG_LEVEL=WARNING python main.py "..."   # see fallbacks as they happen
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "ERROR").upper(),
+        format="%(levelname)s: %(message)s",
+    )
     set_tracing_disabled(True)
     agent = build_agents(build_model())
 
