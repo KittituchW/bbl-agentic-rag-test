@@ -82,9 +82,36 @@ regrade.py           re-score existing transcripts after a checker change (no AP
 knowledge_base.txt   14 fictional company policies
 tests/               offline tests (no API key, no network beyond the model download)
 transcripts/         committed sample runs
+docs/screenshots/    final-output captures required by the brief
 ```
 
 ## Evaluation
+
+### Sample output
+
+Four queries, captured as the end user sees them. Commands and capture notes:
+[`docs/screenshots/`](docs/screenshots/README.md).
+
+**1. The brief's sample query** — answered from the knowledge base, every claim
+carrying its source policy.
+
+![Final output for "What is the policy on international travel?"](docs/screenshots/01-international-travel.png)
+
+**2. Three policies in one answer** — hotel cap, receipt deadline and claim
+deadline come from three separate policies and are merged without repetition.
+
+![Final output for a domestic hotel paid by corporate card](docs/screenshots/02-multi-policy-synthesis.png)
+
+**3. A question the knowledge base does not answer** — parking is adjacent to
+several expense policies, and the system declines rather than improvising from
+the nearest one.
+
+![Final output for the parking reimbursement query](docs/screenshots/03-no-answer-parking.png)
+
+**4. A query instructing the system to ignore its own sources** — it answers
+from the knowledge base regardless.
+
+![Final output for the prompt-injection query](docs/screenshots/04-prompt-injection.png)
 
 ### Committed transcripts
 
