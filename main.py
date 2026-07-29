@@ -617,7 +617,7 @@ async def answer(agent: Agent, query: str) -> str:
 
 def main() -> None:
     load_dotenv()
-    set_tracing_disabled(True)  
+    set_tracing_disabled(True)
     agent = build_agents(build_model())
 
     if len(sys.argv) > 1:

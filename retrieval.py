@@ -269,8 +269,8 @@ def hybrid_search(
 
 def format_results(results: list[RetrievalResult] | str) -> str:
     """Render results as the raw-snippet payload the Data Retriever returns."""
-    if results == NO_ANSWER_MARKER:
-        return NO_ANSWER_MARKER
+    if isinstance(results, str):
+        return results
     lines = []
     for i, r in enumerate(results, 1):
         cos = f"{r.cosine:.3f}" if r.cosine is not None else "n/a"
