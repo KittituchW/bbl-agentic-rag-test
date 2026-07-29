@@ -5,6 +5,12 @@ searches a local knowledge base (`knowledge_base.txt`, fictional company
 policies), and a **Report Generator** synthesizes the snippets. A conditional
 **Verifier** checks high-risk knowledge-gap and policy-violation answers.
 
+A 13-query suite exercises the system, including six queries designed to make it
+decline or qualify rather than extract. Best run: **13 / 13**
+(`transcripts/baseline_high.md`). Scores are per-run rather than fixed — see
+[Committed transcripts](#committed-transcripts) for what a single run does and
+does not establish.
+
 ## Architecture
 
 ```mermaid
@@ -50,14 +56,20 @@ cp .env.example .env                                # then fill in your key(s)
 
 ## Run
 
+All commands assume the virtualenv is active (`source .venv/bin/activate`);
+without it the project's dependencies are not on the path.
+
 ```bash
+# ask a question
 python main.py "What is the policy on international travel?"   # single query
 python main.py                                                 # interactive loop
+
+# evaluate
 pytest tests/ -v                                               # offline tests, no API key needed
 python run_samples.py                                          # full suite -> transcripts/samples_output.md
-python regrade.py                                              # re-score existing transcripts, no API calls
 python run_samples.py -j 4 -o transcripts/run.md               # 4 in flight, custom output file
 python run_samples.py -k parking -k injection                  # only matching queries
+python regrade.py                                              # re-score saved transcripts, no API calls
 ```
 
 ## Repository layout
@@ -72,12 +84,9 @@ tests/               offline tests (no API key, no network beyond the model down
 transcripts/         committed sample runs
 ```
 
-### Committed transcripts
+## Evaluation
 
-Every transcript header records the knowledge-base sha256, because a transcript
-is only comparable to another one scored against the same knowledge base.
-All runs below use `5d68399ce15dd054`; earlier runs against a superseded
-knowledge base are kept in `archive/` rather than presented as comparable.
+### Committed transcripts
 
 | File | Provider / model | Reasoning effort | Result |
 |---|---|---|---|
@@ -86,33 +95,23 @@ knowledge base are kept in `archive/` rather than presented as comparable.
 | `transcripts/baseline_low_2.md` | Google / `gemini-3.5-flash-lite` | `low` | 11 passed, 2 failed |
 | `transcripts/samples_bbl_gpt-5-mini.md` | BBL gateway / `gpt-5-mini` | — | earlier transcript format, retained as the BBL-gateway run |
 
-The single API error is a Gemini free-tier rate limit (15 requests/minute), not
-an answer-quality failure — `run_samples.py` counts the two separately for
-exactly this reason.
+Three things about reading these numbers:
 
-Reasoning effort is the clearest lever on this suite, but a one-point gap
-between two runs is not yet evidence: the same query has been observed passing
-and failing across repeat runs of an unchanged configuration. Treat a single
-run as a sample, not a score.
+- **The knowledge base is versioned into every transcript header.** A transcript
+  is comparable only to one scored against the same knowledge base, so the
+  header records its sha256. The three baselines above share
+  `5d68399ce15dd054`; runs against a superseded knowledge base are kept in
+  `archive/` rather than presented alongside as if comparable.
+- **The one API error is a Gemini free-tier rate limit** (15 requests/minute),
+  not an answer-quality failure. `run_samples.py` counts the two separately for
+  exactly this reason.
+- **A one-point gap between runs is not yet evidence.** Reasoning effort is the
+  clearest lever on this suite, but individual queries have been observed
+  passing and failing across repeat runs of an unchanged configuration. Treat a
+  single run as one sample, not a score.
 
 Running the suite writes to `transcripts/` by default, so new runs sit alongside
 these rather than scattering across the repository root.
-
-### Re-scoring past runs
-
-Widening a phrase group in `run_samples.py` changes how *past* answers would
-have been judged. `regrade.py` re-scores the answers already recorded in
-`transcripts/` and diffs each verdict against the one written at the time, so a
-checker change can be separated from a model regression without spending an API
-call:
-
-```bash
-python regrade.py                            # every transcript
-python regrade.py transcripts/baseline_high.md
-```
-
-It flags `[STATUS FLIP]` when a verdict actually changes, rather than when the
-wording of a failure message changes.
 
 ### Sample query suite
 
@@ -138,6 +137,13 @@ phrases, so factual failures are reported separately from API errors.
 | 11 | Ambiguity detection | Remote work from another country for two days — business travel or not? |
 | 12 | Near-miss no-answer | What is the employee parking reimbursement policy at headquarters? |
 | 13 | Out-of-domain no-answer | Who won the World Cup in 2022? |
+
+Each answer is scored against groups of accepted phrasings rather than one exact
+string, so a correct fact stated in the passive voice is not counted as a miss.
+Because widening a group changes how *past* answers would have been judged,
+`regrade.py` re-scores every saved transcript against the current checker and
+marks `[STATUS FLIP]` where a verdict genuinely changes — which is how a checker
+edit gets told apart from a model regression, without an API call.
 
 Queries 8–13 are the discriminating ones: they test whether the system declines,
 qualifies, or reasons rather than simply extracting. Query 2 is the only one that
