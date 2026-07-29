@@ -56,7 +56,7 @@ flowchart TD
 
 ### One query, start to finish
 
-Take *"What are the rules for an overseas work journey?"* — a question that
+Take *"What are the rules for an overseas work journey?"* - a question that
 shares no words with the policy that answers it.
 
 1. The question goes to the **Report Generator**, which is not allowed to
@@ -66,7 +66,7 @@ shares no words with the policy that answers it.
    meaning score. It merges the two rankings and throws away any paragraph that
    neither method actually matched.
 3. The paragraph that answers this is the International Travel Policy, and its
-   keyword score is **zero** — it shares no words with "overseas work journey".
+   keyword score is **zero** - it shares no words with "overseas work journey".
    The meaning score finds it anyway, and it comes back ranked first. That is
    why both scoring methods exist.
 4. The surviving paragraphs, at most three, are returned **word for word**
@@ -208,14 +208,8 @@ change apart from a real regression, without spending an API call.
 
 ### Committed transcripts
 
-`transcripts/baseline_high.md` — Google / `gemini-3.5-flash-lite`, reasoning
-effort `high`: **13 passed, 0 failed**. The header records the sha256 of the
-knowledge base it was run against, since two transcripts are only comparable if
-the policy file was identical.
-
-Read it as one sample rather than a score. The same question has passed and
-then failed across repeat runs with nothing changed, so 13 / 13 is a
-demonstrated ceiling, not a guaranteed rate.
+`transcripts/baseline_high.md` - Google / `gemini-3.5-flash-lite`, reasoning
+effort `high`: **13 passed, 0 failed**. 
 
 The suite was first run against the BBL gateway on `gpt-5-mini`
 (`LLM_PROVIDER=bbl`). That key reached its usage limit partway through
@@ -258,7 +252,7 @@ travel". Meaning search (embeddings, which turn text into vectors so that
 similar meanings sit close together) misses exact terms and specific numbers.
 
 The two produce two ranked lists, and the lists are merged by **position rather
-than by score** — a paragraph ranked 1st and 3rd beats one ranked 2nd and 8th.
+than by score** - a paragraph ranked 1st and 3rd beats one ranked 2nd and 8th.
 This avoids having to make a keyword score and a similarity score comparable,
 which they are not. Merging is keyed by paragraph, so a paragraph found by both
 methods collects both contributions and rises, and duplicates disappear for
@@ -282,7 +276,7 @@ flowchart LR
     E1 --> F
     E2 --> F
     E3 --> F
-    F["RRF fusion<br/>score = Σ 1 / (k + rank)<br/>keyed by chunk id"] --> OUT["Fused ranking<br/>chunk C — found by both<br/>chunk A — found by both<br/>chunk B, chunk D"]
+    F["RRF fusion<br/>score = Σ 1 / (k + rank)<br/>keyed by chunk id"] --> OUT["Fused ranking<br/>chunk C - found by both<br/>chunk A - found by both<br/>chunk B, chunk D"]
 ```
 
 BM25 is written by hand, about 30 lines with no dependencies, to meet the
