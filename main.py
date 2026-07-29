@@ -620,6 +620,13 @@ async def answer(agent: Agent, query: str) -> str:
         return rendered
 
     verified_answer = str(verified.final_output)
+    if not verified_answer.strip():
+        # An empty verification is not a verdict of "nothing to say" — it is a
+        # failed call that happens to return successfully. Returning it would
+        # replace a complete grounded answer with a blank screen, which is the
+        # worst possible failure: silent, and indistinguishable from a crash.
+        logging.warning("Verifier returned an empty answer; returning original draft")
+        return draft
     if not verifier_output_is_safe(verified_answer):
         logging.warning("Rejecting verifier output containing internal markers")
         return draft
@@ -676,9 +683,12 @@ def main() -> None:
     # default and recoverable with LOG_LEVEL rather than deleted — a silent
     # fallback that cannot be observed is worse than a noisy one.
     #   LOG_LEVEL=WARNING python main.py "..."   # see fallbacks as they happen
+    # force=True because an imported library may already have configured the
+    # root logger, which makes a plain basicConfig() a silent no-op.
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "ERROR").upper(),
         format="%(levelname)s: %(message)s",
+        force=True,
     )
     set_tracing_disabled(True)
     agent = build_agents(build_model())

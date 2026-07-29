@@ -200,6 +200,36 @@ def test_internal_marker_from_verifier_is_rejected(monkeypatch):
     assert not app.verifier_output_is_safe("Supported by [Snippet 2].")
 
 
+@pytest.mark.parametrize("empty_output", ["", "   ", "\n\n"])
+def test_empty_verifier_output_returns_original_draft(monkeypatch, empty_output):
+    """A blank verification must not replace a complete grounded answer.
+
+    The call succeeds, so no exception handler fires; without an explicit
+    check the empty string is returned as the answer and the user sees a blank
+    screen. Observed in practice on the prompt-injection query.
+    """
+    report_agent = Agent(name="Test Report Generator", model="test-model")
+    throttle = RecordingThrottle()
+    calls = []
+
+    async def fake_run(agent, request):
+        calls.append((agent, request))
+        if len(calls) == 1:
+            return SimpleNamespace(
+                final_output=FAILED_DRAFT,
+                new_items=[_tool_output(report_agent, THREE_SOURCE_EVIDENCE)],
+            )
+        return SimpleNamespace(final_output=empty_output, new_items=[])
+
+    monkeypatch.setattr(app, "THROTTLE", throttle)
+    monkeypatch.setattr(app.Runner, "run", fake_run)
+
+    answer = asyncio.run(app.answer(report_agent, THREE_SOURCE_QUERY))
+
+    assert answer == FAILED_DRAFT
+    assert len(calls) == 2
+
+
 @pytest.mark.parametrize(
     "failure",
     [
