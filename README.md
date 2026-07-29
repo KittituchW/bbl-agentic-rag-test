@@ -54,10 +54,65 @@ cp .env.example .env                                # then fill in your key(s)
 python main.py "What is the policy on international travel?"   # single query
 python main.py                                                 # interactive loop
 pytest tests/ -v                                               # offline tests, no API key needed
-python run_samples.py                                          # full sample suite -> samples_output.md
-python run_samples.py -j 4 -o v3.md                            # 4 in flight, custom output file
+python run_samples.py                                          # full suite -> transcripts/samples_output.md
+python regrade.py                                              # re-score existing transcripts, no API calls
+python run_samples.py -j 4 -o transcripts/run.md               # 4 in flight, custom output file
 python run_samples.py -k parking -k injection                  # only matching queries
 ```
+
+## Repository layout
+
+```
+main.py              agent graph, provider selection, conditional verification
+retrieval.py         chunking, BM25, embeddings, RRF, no-answer check
+run_samples.py       13-query sample suite + deterministic factual checks
+regrade.py           re-score existing transcripts after a checker change (no API calls)
+knowledge_base.txt   14 fictional company policies
+tests/               offline tests (no API key, no network beyond the model download)
+transcripts/         committed sample runs
+```
+
+### Committed transcripts
+
+Every transcript header records the knowledge-base sha256, because a transcript
+is only comparable to another one scored against the same knowledge base.
+All runs below use `5d68399ce15dd054`; earlier runs against a superseded
+knowledge base are kept in `archive/` rather than presented as comparable.
+
+| File | Provider / model | Reasoning effort | Result |
+|---|---|---|---|
+| `transcripts/baseline_high.md` | Google / `gemini-3.5-flash-lite` | `high` | 13 passed, 0 failed |
+| `transcripts/baseline_medium_2.md` | Google / `gemini-3.5-flash-lite` | `medium` | 12 passed, 0 failed, 1 API error |
+| `transcripts/baseline_low_2.md` | Google / `gemini-3.5-flash-lite` | `low` | 11 passed, 2 failed |
+| `transcripts/samples_bbl_gpt-5-mini.md` | BBL gateway / `gpt-5-mini` | — | earlier transcript format, retained as the BBL-gateway run |
+
+The single API error is a Gemini free-tier rate limit (15 requests/minute), not
+an answer-quality failure — `run_samples.py` counts the two separately for
+exactly this reason.
+
+Reasoning effort is the clearest lever on this suite, but a one-point gap
+between two runs is not yet evidence: the same query has been observed passing
+and failing across repeat runs of an unchanged configuration. Treat a single
+run as a sample, not a score.
+
+Running the suite writes to `transcripts/` by default, so new runs sit alongside
+these rather than scattering across the repository root.
+
+### Re-scoring past runs
+
+Widening a phrase group in `run_samples.py` changes how *past* answers would
+have been judged. `regrade.py` re-scores the answers already recorded in
+`transcripts/` and diffs each verdict against the one written at the time, so a
+checker change can be separated from a model regression without spending an API
+call:
+
+```bash
+python regrade.py                            # every transcript
+python regrade.py transcripts/baseline_high.md
+```
+
+It flags `[STATUS FLIP]` when a verdict actually changes, rather than when the
+wording of a failure message changes.
 
 ### Sample query suite
 
@@ -194,7 +249,8 @@ re-reading the snippets before any claim of absence.
   technically unnecessary at this scale and is implemented to satisfy the brief.
 - **The cosine floor cannot separate relevant from irrelevant chunks, and no
   single value would.** `MIN_COSINE = 0.25` is empirical and model-specific.
-  Measuring MiniLM cosines across the 13 sample queries (`v3.md`):
+  Measuring MiniLM cosines across the 13 sample queries
+  (`transcripts/samples_bbl_gpt-5-mini.md`):
 
   | | Cosine range |
   |---|---|
@@ -229,6 +285,18 @@ re-reading the snippets before any claim of absence.
   back to the cosine-threshold limitation above. The consistent behaviour is
   that padded answers stay *accurate* — no run has produced a fact absent from
   the knowledge base.
+- **The factual checker matches substrings, so it cannot read meaning.** Each
+  required fact is a group of accepted phrasings, which handles paraphrase
+  (`preserve evidence` also accepts "evidence must be preserved"), but two
+  blind spots remain by construction. A phrasing nobody anticipated still
+  scores as a miss — an early run was marked FAIL for writing a correct
+  sentence in the passive voice. More importantly, the check cannot see
+  negation: "you do not need to preserve evidence" contains the required
+  phrase and would pass. The checker is therefore a regression detector, not a
+  correctness oracle; it is cheap, deterministic and reproducible, which an
+  LLM judge would not be. Closing the negation gap needs a judge model or
+  entailment check, which reintroduces the variance the checker exists to
+  avoid.
 - The tokenizer is naive (lowercase + punctuation strip + small English
   stopword list + light plural stemming); no full stemming, no synonym
   expansion, English-only.
