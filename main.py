@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI, RateLimitError
+from openai import APIError, AsyncOpenAI
 from pydantic import BaseModel
 
 from agents import (
@@ -587,13 +587,21 @@ async def answer(agent: Agent, query: str) -> str:
             ),
             timeout=timeout_seconds,
         )
-    except RateLimitError:
-        logging.warning("Verifier rate-limited; returning original draft")
-        return draft
     except asyncio.TimeoutError:
         logging.warning(
             "Verifier exceeded %.1fs timeout; returning original draft",
             timeout_seconds,
+        )
+        return draft
+    except APIError as exc:
+        # Verification is an optional quality pass over an answer that is
+        # already grounded and complete. Any provider-side failure — quota
+        # (429), outage or overload (5xx), transport error — must degrade to
+        # that draft rather than discard it. Catching APIError covers the whole
+        # family; narrower handling let a 503 destroy a finished answer.
+        logging.warning(
+            "Verifier unavailable (%s); returning original draft",
+            type(exc).__name__,
         )
         return draft
 

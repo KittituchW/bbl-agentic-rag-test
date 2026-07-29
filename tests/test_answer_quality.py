@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents import Agent
@@ -198,12 +200,25 @@ def test_internal_marker_from_verifier_is_rejected(monkeypatch):
     assert not app.verifier_output_is_safe("Supported by [Snippet 2].")
 
 
-def test_verifier_rate_limit_returns_original_draft(monkeypatch):
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "Error code: 429 - quota exhausted",
+        "Error code: 503 - model is currently experiencing high demand",
+    ],
+)
+def test_verifier_provider_failure_returns_original_draft(monkeypatch, failure):
+    """Any provider-side failure degrades to the draft, not to an exception.
+
+    The draft is already grounded and complete by this point, so a 429, a 503
+    or a transport error must never destroy it — an earlier version caught only
+    rate limits, and a 503 from the verifier took down the whole answer.
+    """
     report_agent = Agent(name="Test Report Generator", model="test-model")
     throttle = RecordingThrottle()
     calls = []
 
-    class FakeRateLimitError(Exception):
+    class FakeAPIError(Exception):
         pass
 
     async def fake_run(agent, request):
@@ -213,10 +228,10 @@ def test_verifier_rate_limit_returns_original_draft(monkeypatch):
                 final_output=FAILED_DRAFT,
                 new_items=[_tool_output(report_agent, THREE_SOURCE_EVIDENCE)],
             )
-        raise FakeRateLimitError("quota exhausted")
+        raise FakeAPIError(failure)
 
     monkeypatch.setattr(app, "THROTTLE", throttle)
-    monkeypatch.setattr(app, "RateLimitError", FakeRateLimitError)
+    monkeypatch.setattr(app, "APIError", FakeAPIError)
     monkeypatch.setattr(app.Runner, "run", fake_run)
 
     answer = asyncio.run(app.answer(report_agent, THREE_SOURCE_QUERY))

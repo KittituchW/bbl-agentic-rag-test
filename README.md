@@ -196,9 +196,13 @@ the LLM cannot paraphrase them, and one model round-trip is saved per query.
 only when the draft claims the knowledge base is missing information or the
 question asks which rules were violated. It receives the exact original
 evidence rather than retrieving again. Policy-violation findings use structured
-scenario and policy quotes that are checked before rendering. If verification
-hits a provider quota or exceeds `VERIFIER_TIMEOUT_SECONDS`, the grounded draft
-is returned instead of failing the entire answer.
+scenario and policy quotes that are checked before rendering. Verification is an
+optional quality pass over an answer that is already grounded and complete, so
+any failure degrades to that draft rather than discarding it: quota (429),
+outage or overload (5xx), transport error, or exceeding
+`VERIFIER_TIMEOUT_SECONDS`. An earlier version caught only rate limits, and a
+503 from the verifier destroyed a finished answer — the handler now covers the
+whole `APIError` family.
 
 **Hybrid retrieval (BM25 + local embeddings + RRF).** Keyword-only search
 misses paraphrases ("overseas trip" never matches "international travel");
