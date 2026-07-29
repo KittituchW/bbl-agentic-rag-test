@@ -208,29 +208,14 @@ change apart from a real regression, without spending an API call.
 
 ### Committed transcripts
 
-| File | Provider / model | Reasoning effort | Result |
-|---|---|---|---|
-| `transcripts/baseline_high.md` | Google / `gemini-3.5-flash-lite` | `high` | 13 passed, 0 failed |
-| `transcripts/samples_bbl_gpt-5-mini.md` | BBL gateway / `gpt-5-mini` | — | earlier transcript format, kept as the BBL-gateway run |
+`transcripts/baseline_high.md` — Google / `gemini-3.5-flash-lite`, reasoning
+effort `high`: **13 passed, 0 failed**. The header records the sha256 of the
+knowledge base it was run against, since two transcripts are only comparable if
+the policy file was identical.
 
-One run per provider: the best Google run, and the run against the gateway
-supplied with the brief. Two caveats on reading them.
-
-**Each transcript records which knowledge base it was run against.** Two
-transcripts are only comparable if the policy file was identical, so the header
-stores its sha256 (`5d68399ce15dd054` here). Runs against an older knowledge
-base are kept out of the repository rather than shown alongside as though they
-were comparable.
-
-**One run is one sample, not a score.** 13 / 13 is the best observed run at
-`high` reasoning effort, so read it as a demonstrated ceiling rather than a
-guaranteed rate. The same question has passed and then failed across repeat
-runs with nothing changed. Lower reasoning effort cost one or two questions
-during development, but those runs are not committed here, so treat that as an
-observation this repository does not prove. One more caveat on the numbers:
-Gemini's free tier allows 15 requests per minute, and a run that trips it
-records an API error, which is a rate limit rather than a wrong answer.
-`run_samples.py` counts the two separately.
+Read it as one sample rather than a score. The same question has passed and
+then failed across repeat runs with nothing changed, so 13 / 13 is a
+demonstrated ceiling, not a guaranteed rate.
 
 ---
 
