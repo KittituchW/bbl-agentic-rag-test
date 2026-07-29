@@ -218,26 +218,30 @@ edit is told apart from a model regression, and it costs no API call.
 | File | Provider / model | Reasoning effort | Result |
 |---|---|---|---|
 | `transcripts/baseline_high.md` | Google / `gemini-3.5-flash-lite` | `high` | 13 passed, 0 failed |
-| `transcripts/baseline_medium_2.md` | Google / `gemini-3.5-flash-lite` | `medium` | 12 passed, 0 failed, 1 API error |
-| `transcripts/baseline_low_2.md` | Google / `gemini-3.5-flash-lite` | `low` | 11 passed, 2 failed |
 | `transcripts/samples_bbl_gpt-5-mini.md` | BBL gateway / `gpt-5-mini` | — | earlier transcript format, kept as the BBL-gateway run |
 
-Three points matter when reading these numbers.
+One transcript per provider is committed: the best Google run, and the run
+against the BBL gateway supplied with the brief. Two points matter when reading
+these numbers.
 
 **The knowledge base is versioned into every transcript header.** A transcript
 is only comparable to another one scored against the same knowledge base, so
-the header records its sha256. The three baselines above share
-`5d68399ce15dd054`. Runs against a superseded knowledge base are kept in
-`archive/` instead of being presented alongside as if they were comparable.
+the header records its sha256. `baseline_high.md` was scored against
+`5d68399ce15dd054`. Runs against a superseded knowledge base are kept out of
+the repository instead of being presented alongside as if they were comparable.
 
-**The single API error is a Gemini free-tier rate limit** of 15 requests per
-minute. It is not an answer-quality failure. `run_samples.py` counts the two
-separately for this exact reason.
+**One run is one sample, not a score.** 13 / 13 is the best observed run at
+`high` reasoning effort, so read it as a demonstrated ceiling rather than a
+guaranteed rate. Individual queries have been seen to pass and then fail across
+repeat runs of an unchanged configuration. Reasoning effort was the clearest
+lever during development, with lower settings losing one to two queries, but
+those runs are not committed here, so treat that as an observation rather than
+as something this repository evidences.
 
-**A one-point gap between runs is not yet evidence.** Reasoning effort is the
-clearest lever on this suite. Even so, individual queries have been seen to
-pass and then fail across repeat runs of an unchanged configuration. Treat one
-run as one sample, not as a score.
+Failures are also not all the same kind. Gemini's free tier allows 15 requests
+per minute, and a run that trips it records an API error, which is not an
+answer-quality failure. `run_samples.py` counts the two separately for this
+reason.
 
 Running the suite writes into `transcripts/` by default, so new runs sit next
 to these instead of scattering across the repository root.
