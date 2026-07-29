@@ -65,11 +65,10 @@ shares no words with the policy that answers it.
    base into 14 paragraphs and scores each one twice: a keyword score, and a
    meaning score. It merges the two rankings and throws away any paragraph that
    neither method actually matched.
-3. For the International Travel Policy, the paragraph that actually answers
-   this, the keyword score is **0.00** — "overseas work journey" and
-   "international travel" share no words. Its meaning score is **0.574**, so it
-   still comes back ranked first. This is the reason both scoring methods
-   exist. (Trace: `chunk 0 | bm25= 0.00 cosine=0.574 | via semantic`.)
+3. The paragraph that answers this is the International Travel Policy, and its
+   keyword score is **zero** — it shares no words with "overseas work journey".
+   The meaning score finds it anyway, and it comes back ranked first. That is
+   why both scoring methods exist.
 4. The surviving paragraphs, at most three, are returned **word for word**
    rather than summarised. The Report Generator writes the answer from them.
    The draft claims nothing is missing, so the Verifier is skipped and the
@@ -304,16 +303,15 @@ free, offline and repeatable.
 **Take the good paragraphs, not the top 3.** The merge ranks *every* paragraph,
 so blindly taking the top 3 fills the result with paragraphs that neither
 method matched. Ask about `password length` and you would get the one real
-policy plus two arbitrary others. A paragraph must earn its place, by a
-non-zero keyword score or a meaning score above the floor. So 3 is a ceiling,
-not a quota, and a narrow question can correctly return a single paragraph.
+policy plus two arbitrary others. A paragraph must be matched by at least one
+of the two methods to survive. So 3 is a ceiling, not a quota, and a narrow
+question can correctly return a single paragraph.
 
 **Two separate defences against answering when there is no answer.** Search
-always returns *something*, so: in the Python function, keyword search must
-find a credible match, or the meaning score must clear 0.25, otherwise it
-returns a no-answer marker. And in the prompt, the Report Generator is told to
-say the policies do not cover the question rather than guess. The prompt layer
-catches borderline cases the number misses.
+always returns *something*, so the Python function returns a no-answer marker
+when nothing scores well enough, and the prompt separately tells the Report
+Generator to say the policies do not cover the question rather than guess. The
+prompt layer catches the borderline cases a score threshold misses.
 
 **The Report Generator's answer contract.** Up to three paragraphs arrive, and
 not all of them are necessarily relevant, so the prompt does the work of
@@ -340,29 +338,12 @@ claiming something is absent now requires re-reading the paragraphs first.
 
 ## Known limitations
 
-**The relevance score cannot reliably tell a good paragraph from a bad one, and
-no single cutoff would.** A paragraph survives if its meaning score clears
-0.25. That number is empirical and specific to this embedding model. Measured
-across the 13 questions:
-
-| | Score range |
-|---|---|
-| Correct top-ranked paragraph | 0.340 – 0.687 |
-| Irrelevant filler paragraph | 0.193 – 0.474 |
-
-The two ranges overlap. A correct paragraph scored as low as 0.340 (the
-domestic-hotel question) while an irrelevant one scored as high as 0.474 (the
-parking question), so any cutoff that removes the noise also removes real
-answers. Demanding a keyword match instead does not work either: question 2
-finds its correct paragraph on meaning alone, which is the entire reason
-meaning search exists.
-
-The practical effect is that most paragraphs clear 0.25, the ceiling of 3 is
-usually reached, and the Report Generator's prompt is what actually suppresses
-the surplus. A *relative* cutoff (keep anything within ~60% of the best score
-for that question) fixes the parking and injection cases but not the paraphrase
-case, so it is an improvement rather than a solution. Solving it properly needs
-a reranker or a calibrated relevance model, which is out of scope here.
+**No relevance cutoff can separate good paragraphs from bad ones.** Real
+answers and irrelevant filler score in the same range, so raising the bar drops
+real answers and lowering it lets filler through. Search therefore passes along
+a few paragraphs too many, and the Report Generator's prompt is what keeps them
+out of the answer. Fixing this in search needs a reranker, which is out of
+scope here.
 
 **Because the prompt does that filtering, it is not guaranteed.** The generator
 keeps irrelevant paragraphs out of the answer roughly 70% of the time; 4 of 13
