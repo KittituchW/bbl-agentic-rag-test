@@ -4,5 +4,13 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
 # fastembed model cache (if downloaded into the project dir)
 local_cache/
+.fastembed_cache/
+
+# superseded run transcripts and one-off dev scripts, kept locally only
+archive/
+
+# OS cruft
+.DS_Store
